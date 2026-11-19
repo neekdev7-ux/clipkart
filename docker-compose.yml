@@ -1,0 +1,12 @@
+services:
+  clipnova:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - CLIPNOVA_DATA=/app/data
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
