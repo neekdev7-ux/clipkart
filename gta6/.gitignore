@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+data/
+.pytest_cache/
+*.egg-info/
+# YouTube OAuth — NEVER commit these.
+client_secret.json
+token.json
+*.muse-github-snapshot-sync.json*

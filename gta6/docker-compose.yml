@@ -1,0 +1,14 @@
+services:
+  clipnova-gta6:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - CLIPNOVA_DATA=/app/data
+    volumes:
+      - ./data:/app/data
+      # Optional: OAuth client JSON (uncomment after downloading it).
+      # - ./client_secret.json:/app/client_secret.json:ro
+    restart: unless-stopped

@@ -1,0 +1,34 @@
+# systemd unit for ClipNova GTA 6 Edition (VPS, always-on).
+#
+# Install:
+#   1. Copy the app to /opt/clipnova-gta6 and create the venv there:
+#        python3 -m venv /opt/clipnova-gta6/.venv
+#        /opt/clipnova-gta6/.venv/bin/pip install -r /opt/clipnova-gta6/requirements.txt
+#      (ffmpeg must be installed: sudo apt install ffmpeg)
+#   2. Copy .env.example to /opt/clipnova-gta6/.env and fill it in.
+#   3. sudo cp clipnova-gta6.service /etc/systemd/system/
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable --now clipnova-gta6
+#   4. Check: sudo journalctl -u clipnova-gta6 -f
+#
+# Edit User/WorkingDirectory/EnvironmentFile if you install elsewhere.
+[Unit]
+Description=ClipNova GTA 6 Edition — live stream Shorts API server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/clipnova-gta6
+EnvironmentFile=/opt/clipnova-gta6/.env
+Environment=CLIPNOVA_DATA=/opt/clipnova-gta6/data
+ExecStart=/opt/clipnova-gta6/.venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+# Whisper + ffmpeg are CPU-heavy; keep the process contained.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

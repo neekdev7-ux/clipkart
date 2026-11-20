@@ -1,0 +1,41 @@
+# Render blueprint for ClipNova GTA 6 Edition.
+# NOTE: Render's free tier has no persistent disk and sleeps — use a
+# paid instance + persistent disk for always-on monitoring. A VPS
+# (see README + clipnova-gta6.service) is the recommended host.
+services:
+  - type: web
+    name: clipnova-gta6
+    runtime: docker
+    plan: standard
+    disk:
+      name: clipnova-data
+      mountPath: /app/data
+      sizeGB: 20
+    envVars:
+      - key: CLIPNOVA_DATA
+        value: /app/data
+      - key: WHISPER_MODEL
+        value: base
+      - key: AUTO_UPLOAD
+        value: "false"
+      - key: MAX_UPLOADS_PER_DAY
+        value: "6"
+      - key: MONITOR_ON_START
+        value: "false"
+      - key: SEGMENT_MINUTES
+        value: "5"
+      - key: RETENTION_HOURS
+        value: "2"
+      - key: DISK_CAP_GB
+        value: "15"
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+    healthCheckPath: /api/health
