@@ -158,7 +158,8 @@ class Monitor:
             rec = recorder_mod.StreamRecorder(
                 s["video_id"], info["hls_url"], s["segments_dir"] or
                 str(self.settings.stream_root / s["video_id"]),
-                segment_minutes=self.settings.segment_minutes)
+                segment_minutes=self.settings.segment_minutes,
+                audio_hls_url=info.get("audio_hls_url", ""))
             if rec.start():
                 self._recorders[s["id"]] = rec
                 store.update_stream(self.db_path, s["id"], status="recording",

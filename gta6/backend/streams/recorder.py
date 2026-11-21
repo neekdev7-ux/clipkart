@@ -73,14 +73,22 @@ def prune_segments(segments_dir, retention_hours=2.0, disk_cap_gb=20.0,
     return deleted
 
 
-def build_ffmpeg_command(hls_url, segments_dir, segment_seconds=300):
-    """ffmpeg segmenting command (stream copy, keyframe-aligned cuts)."""
+def build_ffmpeg_command(hls_url, segments_dir, segment_seconds=300,
+                         audio_hls_url=""):
+    """ffmpeg segmenting command (stream copy, keyframe-aligned cuts).
+
+    When audio_hls_url is given (separate audio rendition), both inputs
+    are mapped into the segments; otherwise the single input is copied
+    as-is.
+    """
     pattern = str(Path(segments_dir) / "seg_%Y%m%dT%H%M%S_%03d.mp4")
-    return [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-reconnect", "1", "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "5",
-        "-i", hls_url,
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
+    for url in [hls_url] + ([audio_hls_url] if audio_hls_url else []):
+        cmd += ["-reconnect", "1", "-reconnect_streamed", "1",
+                "-reconnect_delay_max", "5", "-i", url]
+    if audio_hls_url:
+        cmd += ["-map", "0:v", "-map", "1:a"]
+    cmd += [
         "-c", "copy",
         "-f", "segment",
         "-segment_time", str(segment_seconds),
@@ -89,14 +97,17 @@ def build_ffmpeg_command(hls_url, segments_dir, segment_seconds=300):
         "-strftime", "1",
         pattern,
     ]
+    return cmd
 
 
 class StreamRecorder:
     """One live recording. Runs ffmpeg in a background thread."""
 
-    def __init__(self, video_id, hls_url, segments_dir, segment_minutes=5):
+    def __init__(self, video_id, hls_url, segments_dir, segment_minutes=5,
+                 audio_hls_url=""):
         self.video_id = video_id
         self.hls_url = hls_url
+        self.audio_hls_url = audio_hls_url
         self.segments_dir = Path(segments_dir)
         self.segment_seconds = max(60, int(segment_minutes) * 60)
         self.proc = None
@@ -120,7 +131,8 @@ class StreamRecorder:
         """Launch ffmpeg. Returns False if the process exits immediately."""
         self.segments_dir.mkdir(parents=True, exist_ok=True)
         cmd = build_ffmpeg_command(self.hls_url, self.segments_dir,
-                                   self.segment_seconds)
+                                   self.segment_seconds,
+                                   audio_hls_url=self.audio_hls_url)
         try:
             self.proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

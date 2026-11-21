@@ -119,10 +119,13 @@ def discover_live_streams(queries, api_key=None, min_viewers=10,
 
 
 def get_stream_info(url: str) -> dict:
-    """Full info for one stream URL, including is_live + HLS manifest URL.
+    """Full info for one stream URL, including is_live + HLS manifest URLs.
 
     Returns {video_id, title, channel, viewers, thumbnail, is_live,
-    hls_url}. hls_url is "" when no HLS format is available.
+    hls_url, audio_hls_url}. hls_url is "" when no HLS format is
+    available. audio_hls_url is set only when the video track has no
+    audio of its own (separate audio rendition); the recorder feeds both
+    URLs to ffmpeg.
     """
     import yt_dlp
 
@@ -130,33 +133,49 @@ def get_stream_info(url: str) -> dict:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     hls_url = ""
+    audio_hls_url = ""
     candidates = []
     for fmt in info.get("formats") or []:
         furl = fmt.get("url", "")
         proto = fmt.get("protocol", "")
         if proto in ("m3u8", "m3u8_native") or furl.endswith(".m3u8"):
             candidates.append(fmt)
-    # Prefer a combined audio+video HLS variant: the first m3u8 format
-    # yt-dlp lists is often audio-only, which records sound with no
-    # picture (no Short can be cut from it). Pick the smallest height
-    # >= 480p to keep recordings light; fall back to the largest
-    # available A/V variant, then to any HLS variant.
-    av = [f for f in candidates
-          if f.get("vcodec") not in (None, "none")
-          and f.get("acodec") not in (None, "none")]
+
+    def _has_video(f):
+        return f.get("vcodec") not in (None, "none")
 
     def _height(f):
         return f.get("height") or 0
 
-    if av:
-        ge480 = [f for f in av if _height(f) >= 480]
+    def _pick_video(pool):
+        ge480 = [f for f in pool if _height(f) >= 480]
         if ge480:
-            best = min(ge480, key=_height)
-        else:
-            best = max(av, key=_height)
-        hls_url = best.get("url", "")
-    elif candidates:
-        hls_url = candidates[0].get("url", "")
+            return min(ge480, key=_height)
+        return max(pool, key=_height)
+
+    # YouTube live HLS usually offers separate video-only and audio-only
+    # tracks; combined A/V variants exist for some streams. Prefer
+    # combined; otherwise take a video track plus the best audio track.
+    # (Audio-only HLS renditions such as itag 233/234 often report
+    # acodec=None, so "no video" is the audio signal, not acodec.)
+    # Audio-only alone is the last resort: it transcribes, but no Short
+    # can be cut from it.
+    av = [f for f in candidates
+          if _has_video(f) and f.get("acodec") not in (None, "none")]
+    video_only = [f for f in candidates
+                  if _has_video(f)
+                  and f.get("acodec") in (None, "none")]
+    audio_only = [f for f in candidates if not _has_video(f)]
+    if av:
+        hls_url = _pick_video(av).get("url", "")
+    elif video_only:
+        hls_url = _pick_video(video_only).get("url", "")
+        if audio_only:
+            # yt-dlp lists formats ascending; the last audio rendition
+            # is the best quality available.
+            audio_hls_url = audio_only[-1].get("url", "")
+    elif audio_only:
+        hls_url = audio_only[-1].get("url", "")
     if not hls_url:
         hls_url = info.get("url", "") or ""
     stream = _clean_stream(
@@ -166,6 +185,7 @@ def get_stream_info(url: str) -> dict:
         info.get("thumbnail", ""))
     stream["is_live"] = bool(info.get("is_live"))
     stream["hls_url"] = hls_url
+    stream["audio_hls_url"] = audio_hls_url
     return stream
 
 

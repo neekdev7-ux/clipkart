@@ -72,6 +72,19 @@ def test_build_ffmpeg_command():
     assert cmd[cmd.index("-segment_time") + 1] == "300"
     assert "-f" in cmd and "segment" in cmd
     assert any(p.startswith("/tmp/segs/seg_") for p in cmd)
+    assert "-map" not in cmd
+
+
+def test_build_ffmpeg_command_two_inputs():
+    cmd = rec.build_ffmpeg_command("https://example.com/video.m3u8",
+                                   "/tmp/segs", segment_seconds=300,
+                                   audio_hls_url="https://example.com/audio.m3u8")
+    assert cmd.count("-i") == 2
+    assert "https://example.com/video.m3u8" in cmd
+    assert "https://example.com/audio.m3u8" in cmd
+    assert cmd[cmd.index("-map") + 1] == "0:v"
+    assert cmd[cmd.index("-map") + 2] == "-map"
+    assert cmd[cmd.index("-map") + 3] == "1:a"
 
 
 def test_dir_size_bytes(tmp_path):

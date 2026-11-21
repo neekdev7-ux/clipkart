@@ -44,6 +44,25 @@ def test_prefers_combined_av_over_audio_only(monkeypatch):
                         lambda opts: _FakeYDL(_info(formats)))
     stream = discovery.get_stream_info("https://www.youtube.com/watch?v=vid1")
     assert stream["hls_url"] == "https://example.com/av480.m3u8"
+    assert stream["audio_hls_url"] == ""
+
+
+def test_separate_tracks_pick_video_plus_best_audio(monkeypatch):
+    # Real YouTube live layout: separate video-only and audio-only HLS
+    # renditions, audio reporting acodec=None.
+    formats = [
+        _fmt("https://example.com/a233.m3u8", "none", None, None),
+        _fmt("https://example.com/a234.m3u8", "none", None, None),
+        _fmt("https://example.com/v144.m3u8", "avc1", "none", 144),
+        _fmt("https://example.com/v360.m3u8", "avc1", "none", 360),
+        _fmt("https://example.com/v480.m3u8", "avc1", "none", 480),
+        _fmt("https://example.com/v720.m3u8", "avc1", "none", 720),
+    ]
+    monkeypatch.setattr(yt_dlp, "YoutubeDL",
+                        lambda opts: _FakeYDL(_info(formats)))
+    stream = discovery.get_stream_info("https://www.youtube.com/watch?v=vid1")
+    assert stream["hls_url"] == "https://example.com/v480.m3u8"
+    assert stream["audio_hls_url"] == "https://example.com/a234.m3u8"
 
 
 def test_prefers_largest_av_when_none_reaches_480(monkeypatch):
@@ -63,6 +82,7 @@ def test_falls_back_to_first_hls_when_no_av(monkeypatch):
                         lambda opts: _FakeYDL(_info(formats)))
     stream = discovery.get_stream_info("https://www.youtube.com/watch?v=vid1")
     assert stream["hls_url"] == "https://example.com/audio.m3u8"
+    assert stream["audio_hls_url"] == ""
 
 
 def test_falls_back_to_info_url_without_hls(monkeypatch):
