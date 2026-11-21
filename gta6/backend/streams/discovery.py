@@ -130,12 +130,33 @@ def get_stream_info(url: str) -> dict:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     hls_url = ""
+    candidates = []
     for fmt in info.get("formats") or []:
         furl = fmt.get("url", "")
         proto = fmt.get("protocol", "")
         if proto in ("m3u8", "m3u8_native") or furl.endswith(".m3u8"):
-            hls_url = furl
-            break
+            candidates.append(fmt)
+    # Prefer a combined audio+video HLS variant: the first m3u8 format
+    # yt-dlp lists is often audio-only, which records sound with no
+    # picture (no Short can be cut from it). Pick the smallest height
+    # >= 480p to keep recordings light; fall back to the largest
+    # available A/V variant, then to any HLS variant.
+    av = [f for f in candidates
+          if f.get("vcodec") not in (None, "none")
+          and f.get("acodec") not in (None, "none")]
+
+    def _height(f):
+        return f.get("height") or 0
+
+    if av:
+        ge480 = [f for f in av if _height(f) >= 480]
+        if ge480:
+            best = min(ge480, key=_height)
+        else:
+            best = max(av, key=_height)
+        hls_url = best.get("url", "")
+    elif candidates:
+        hls_url = candidates[0].get("url", "")
     if not hls_url:
         hls_url = info.get("url", "") or ""
     stream = _clean_stream(

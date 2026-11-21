@@ -91,6 +91,10 @@ class UploadRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store.init_db(DB_PATH)
+    # A restart leaves "recording" rows whose ffmpeg is gone; mark them
+    # "watching" again so the monitor can pick them up fresh.
+    for s in store.list_streams(DB_PATH, status="recording"):
+        store.update_stream(DB_PATH, s["id"], status="watching", error="")
     JOB_ROOT.mkdir(parents=True, exist_ok=True)
     CLIP_ROOT.mkdir(parents=True, exist_ok=True)
     settings.stream_root.mkdir(parents=True, exist_ok=True)
