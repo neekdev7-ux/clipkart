@@ -1,7 +1,7 @@
 # ClipNova GTA 6 Edition runtime dependencies (pinned)
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-yt-dlp==2025.01.26
+yt-dlp==2026.10.26
 faster-whisper==1.0.3
 numpy==1.26.4
 google-api-python-client==2.154.0
