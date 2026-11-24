@@ -38,6 +38,33 @@ _TITLE_TEMPLATES_KEYWORD = [
     "Everything About {Kw}, Fast",
 ]
 
+# --- GTA 6 mode ------------------------------------------------------------
+# Every title mentions GTA 6; the keyword slot carries the clip's own
+# topic (Lucia, Jason, Vice City, a leak, a heist, ...).
+
+_TITLE_TEMPLATES_GTA6 = [
+    "GTA 6 {Kw} — You Have to See This",
+    "This GTA 6 {Kw} Moment Is Insane",
+    "{Kw} in GTA 6: First Look in 60 Seconds",
+    "GTA 6 {Kw} — The Detail Everyone Missed",
+    "Why GTA 6 {Kw} Changes Everything",
+    "GTA 6 {Kw} Just Broke the Internet",
+]
+
+GTA6_HASHTAGS = [
+    "#gta6", "#gtavi", "#grandtheftauto6", "#vicecity",
+    "#gta6shorts", "#rockstargames", "#gta6gameplay", "#shorts",
+]
+
+GTA6_TAGS = [
+    "gta 6", "gta vi", "grand theft auto 6", "vice city",
+    "rockstar games", "gta 6 gameplay", "gta 6 shorts",
+    "gta 6 trailer", "gta 6 leak",
+]
+
+# Words that carry no information inside a "GTA 6 {Kw}" title.
+_GTA6_TITLE_STOPWORDS = {"gta", "vi", "6", "grand", "theft", "auto"}
+
 
 def extract_keywords(text, title="", top_n=12):
     """Top content words by frequency, title words boosted."""
@@ -93,6 +120,43 @@ def _rule_based_titles(keywords, clip_text):
     return out[:3]
 
 
+def _gta6_rule_based_titles(keywords, clip_text):
+    kws = [k for k in keywords if k.lower() not in _GTA6_TITLE_STOPWORDS]
+    kw = (kws[0] if kws else (keywords[0] if keywords else "moment"))
+    kw2 = (kws[1] if len(kws) > 1 else kw)
+    picks = [
+        _TITLE_TEMPLATES_GTA6[len(kw) % len(_TITLE_TEMPLATES_GTA6)],
+        _TITLE_TEMPLATES_GTA6[(len(kw2) + 2) % len(_TITLE_TEMPLATES_GTA6)],
+        _TITLE_TEMPLATES_GTA6[(len(clip_text) + 1) % len(_TITLE_TEMPLATES_GTA6)],
+    ]
+    titles = []
+    for i, template in enumerate(picks):
+        word = kw if i != 1 else kw2
+        t = _trim(template.format(kw=word, Kw=word.capitalize()))
+        if t not in titles:
+            titles.append(t)
+    while len(titles) < 3:
+        titles.append(_trim(f"GTA 6 {kw.capitalize()} in 60 Seconds"))
+    return titles[:3]
+
+
+def _gta6_hashtags(keywords):
+    tags = list(GTA6_HASHTAGS)
+    for kw in keywords:
+        tag = "#" + re.sub(r"[^a-z0-9]", "", kw.lower())
+        if tag != "#" and tag not in tags:
+            tags.append(tag)
+    return tags[:12]
+
+
+def _gta6_tags(keywords):
+    tags = list(GTA6_TAGS)
+    for kw in keywords:
+        if kw not in tags:
+            tags.append(kw)
+    return tags[:12]
+
+
 def _hashtags(keywords, extra=()):
     tags = ["shorts", "viral"]
     for kw in keywords:
@@ -125,19 +189,29 @@ def _tags(keywords, title=""):
     return tags[:12]
 
 
-def _llm_titles(clip_text, keywords, title=""):
+def _llm_titles(clip_text, keywords, title="", mode="generic"):
     """Optional LLM upgrade. Returns list of 3 titles or None on any failure."""
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not gemini_key and not openai_key:
         return None
-    prompt = (
-        "Write exactly 3 YouTube Shorts titles (each under 100 characters) "
-        "for this clip. One curiosity-driven, one how-to/number, one keyword-led. "
-        "Return ONLY a JSON array of 3 strings, no other text.\n\n"
-        f"Video title: {title}\nKeywords: {', '.join(keywords[:6])}\n"
-        f"Clip transcript: {clip_text[:600]}"
-    )
+    if mode == "gta6":
+        prompt = (
+            "Write exactly 3 YouTube Shorts titles (each under 100 characters) "
+            "for this GTA 6 clip. Every title must mention GTA 6. One "
+            "curiosity-driven, one reaction/hype, one keyword-led. Return ONLY "
+            "a JSON array of 3 strings, no other text.\n\n"
+            f"Video title: {title}\nKeywords: {', '.join(keywords[:6])}\n"
+            f"Clip transcript: {clip_text[:600]}"
+        )
+    else:
+        prompt = (
+            "Write exactly 3 YouTube Shorts titles (each under 100 characters) "
+            "for this clip. One curiosity-driven, one how-to/number, one keyword-led. "
+            "Return ONLY a JSON array of 3 strings, no other text.\n\n"
+            f"Video title: {title}\nKeywords: {', '.join(keywords[:6])}\n"
+            f"Clip transcript: {clip_text[:600]}"
+        )
     try:
         if gemini_key:
             url = ("https://generativelanguage.googleapis.com/v1beta/models/"
@@ -170,22 +244,43 @@ def _llm_titles(clip_text, keywords, title=""):
                 raw = raw[4:].strip()
         titles = json.loads(raw)
         titles = [_trim(str(t)) for t in titles if str(t).strip()][:3]
+        if mode == "gta6":
+            titles = [t if "gta 6" in t.lower() or "gta vi" in t.lower()
+                      else _trim(f"GTA 6 — {t}") for t in titles]
         return titles if len(titles) == 3 else None
     except Exception:
         return None
 
 
-def generate_seo(clip_text, video_title="", keywords=None):
+def generate_seo(clip_text, video_title="", keywords=None, mode="generic"):
     """Generate the full SEO pack for one clip.
+
+    mode="gta6" uses GTA 6 title templates, hashtags and tags;
+    mode="generic" (default) keeps the original behaviour.
 
     Returns {titles: [3], description: str, hashtags: [8-12], tags: [8-12]}.
     """
     keywords = keywords or extract_keywords(clip_text, video_title)
-    titles = _llm_titles(clip_text, keywords, video_title)
+    titles = _llm_titles(clip_text, keywords, video_title, mode=mode)
     if not titles:
-        titles = _rule_based_titles(keywords, clip_text)
+        if mode == "gta6":
+            titles = _gta6_rule_based_titles(keywords, clip_text)
+        else:
+            titles = _rule_based_titles(keywords, clip_text)
 
     hook = _first_sentence(clip_text, max_len=110)
+    if mode == "gta6":
+        description = (
+            f"{hook}\n"
+            f"Full video: {video_title or 'see the original video'}.\n"
+            "More GTA 6 Shorts every day — like & subscribe!"
+        )
+        return {
+            "titles": titles,
+            "description": description,
+            "hashtags": _gta6_hashtags(keywords),
+            "tags": _gta6_tags(keywords),
+        }
     description = (
         f"{hook}\n"
         f"Full video: {video_title or 'see the original video'}.\n"

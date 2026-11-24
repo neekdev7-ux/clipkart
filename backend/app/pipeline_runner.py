@@ -3,11 +3,34 @@ cut+caption -> SEO. Updates the job row as it goes.
 """
 from __future__ import annotations
 
+import re
 import traceback
 from pathlib import Path
 
-from ..pipeline import captions, cut, download, score, seo, transcribe
+from ..pipeline import captions, cut, download, gta6, score, seo, transcribe
 from . import store
+
+_GTA6_TITLE_RE = re.compile(r"gta\s*6|gta\s*vi|grand theft auto", re.IGNORECASE)
+# Transcript-based detection needs this many DISTINCT GTA 6 lexicon hits
+# (a single "secret" or "race" must not flip a generic video to GTA 6).
+_GTA6_MIN_DISTINCT_HITS = 3
+
+
+def resolve_mode(requested, title, words):
+    """Resolve the job's scoring/SEO mode.
+
+    An explicit "gta6"/"generic" request wins. "auto" (or anything else)
+    detects GTA 6 from the video title, else from the transcript
+    (>=3 distinct GTA 6 lexicon hits); otherwise generic.
+    """
+    if requested in ("gta6", "generic"):
+        return requested
+    if _GTA6_TITLE_RE.search(title or ""):
+        return "gta6"
+    text = " ".join(w["word"] for w in (words or []))
+    if len(set(gta6.hype_hits(text))) >= _GTA6_MIN_DISTINCT_HITS:
+        return "gta6"
+    return "generic"
 
 
 def run_pipeline(db_path, job_root, job_id):
@@ -24,6 +47,7 @@ def run_pipeline(db_path, job_root, job_id):
         url = job["url"]
         max_clips = job["max_clips"]
         clip_seconds = job["clip_seconds"]
+        requested_mode = job.get("mode") or "auto"
 
         progress(5, "Fetching video info...")
         info = download.get_video_info(url)
@@ -41,15 +65,21 @@ def run_pipeline(db_path, job_root, job_id):
             raise RuntimeError("Transcript too short — is there speech in this video?")
         energy = score.compute_energy_profile(result["wav_path"])
 
+        mode = resolve_mode(requested_mode, info["title"], words)
+        store.update_job(db_path, job_id, mode=mode)
+
         progress(65, "Finding viral moments...")
-        ranked = score.rank_clips(words, title=info["title"],
-                                  clip_seconds=clip_seconds,
-                                  max_clips=max_clips, energy=energy)
+        if mode == "gta6":
+            ranked = gta6.rank_clips_gta6(words, title=info["title"],
+                                          clip_seconds=clip_seconds,
+                                          max_clips=max_clips, energy=energy)
+        else:
+            ranked = score.rank_clips(words, title=info["title"],
+                                      clip_seconds=clip_seconds,
+                                      max_clips=max_clips, energy=energy)
         if not ranked:
             raise RuntimeError("Video too short to cut 30s clips from.")
 
-        keywords = seo.extract_keywords(" ".join(w["word"] for w in words),
-                                        info["title"])
         clips = []
         for i, clip in enumerate(ranked):
             pct = 70 + int(25 * (i + 1) / len(ranked))
@@ -65,7 +95,12 @@ def run_pipeline(db_path, job_root, job_id):
                 # the same cut without burned captions rather than failing.
                 cut.cut_clip(video_path, clip["start"], clip["end"], out_path,
                              mode="crop")
-            clip_seo = seo.generate_seo(clip["text"], info["title"], keywords)
+            # Per-clip keywords: job-level keywords made every clip's SEO
+            # pack identical (same titles/hashtags/tags). Extracting from
+            # the clip's own text gives each clip distinct titles.
+            clip_keywords = seo.extract_keywords(clip["text"], info["title"])
+            clip_seo = seo.generate_seo(clip["text"], info["title"],
+                                        clip_keywords, mode=mode)
             clips.append({
                 "n": i + 1,
                 "start": clip["start"],

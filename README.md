@@ -9,6 +9,20 @@ moments into 1080×1920 MP4s with word-by-word karaoke captions.
 
 > Use with videos you own or have rights to.
 
+## GTA 6 mode
+
+Paste a GTA 6 long-video link and ClipNova switches to GTA 6 mode:
+windows are scored with an extra hype bonus for GTA 6 lexicon (Vice City,
+Lucia, Jason, leaks, heists, ... — see `backend/pipeline/gta6.py`),
+and each clip's SEO pack uses GTA 6 titles, hashtags (`#gta6`, `#gtavi`,
+`#grandtheftauto6`, `#vicecity`, ...) and tags.
+
+- `mode` field on `POST /api/jobs`: `"auto"` (default), `"gta6"`, `"generic"`.
+- Auto-detect: GTA 6 when the video title matches GTA 6 / GTA VI /
+  Grand Theft Auto, or the transcript has ≥3 distinct GTA 6 lexicon
+  hits; otherwise generic. An explicit `"gta6"` / `"generic"` always wins.
+- The resolved mode is stored on the job row (`mode` in `GET /api/jobs/{id}`).
+
 ## How it works
 
 1. **Download** — yt-dlp, best MP4 ≤1080p.
@@ -47,7 +61,7 @@ docker compose up --build
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/jobs` | `{url, max_clips=5, clip_seconds=45}` → `{job_id, status}` |
+| `POST` | `/api/jobs` | `{url, max_clips=5, clip_seconds=45, mode="auto"}` → `{job_id, status}` |
 | `GET` | `/api/jobs/{id}` | Status, progress, video info, clips + SEO |
 | `GET` | `/api/jobs/{id}/clips/{n}/download` | Clip MP4 download |
 | `GET` | `/api/health` | Health check |
@@ -100,16 +114,16 @@ pytest -v
 ```
 
 Tests cover scoring, SEO, ASS captions, the API lifecycle (mocked
-download/transcribe), and a full pipeline smoke test on an
-ffmpeg-generated 90s video with stub transcription. No Whisper model is
-downloaded by the tests.
+download/transcribe), GTA 6 hype scoring / SEO / mode auto-detect, and a
+full pipeline smoke test on an ffmpeg-generated 90s video with stub
+transcription. No Whisper model is downloaded by the tests.
 
 ## Project layout
 
 ```
 backend/
   app/        FastAPI app, SQLite job store, pipeline runner
-  pipeline/   download, transcribe, score, cut, captions, seo
+  pipeline/   download, transcribe, score, gta6, cut, captions, seo
 frontend/     single-page UI (no build step)
 landing/      static GitHub Pages site + client-side scoring demo
 tests/        pytest suite

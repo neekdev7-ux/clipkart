@@ -9,6 +9,7 @@ import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
+from typing import Literal
 
 from contextlib import asynccontextmanager
 
@@ -48,6 +49,9 @@ class JobRequest(BaseModel):
     url: str
     max_clips: int = Field(default=5, ge=1, le=10)
     clip_seconds: int = Field(default=45, ge=30, le=60)
+    # "auto" detects GTA 6 from the video title / transcript;
+    # "gta6" / "generic" force that mode.
+    mode: Literal["auto", "gta6", "generic"] = "auto"
 
 
 @asynccontextmanager
@@ -78,7 +82,8 @@ def create_job(req: JobRequest, request: Request, background: BackgroundTasks):
             status_code=429,
             detail=f"Rate limit: {MAX_JOBS_PER_HOUR} jobs per hour. Try again later.")
     job_id = uuid.uuid4().hex[:12]
-    store.create_job(DB_PATH, job_id, url, req.max_clips, req.clip_seconds)
+    store.create_job(DB_PATH, job_id, url, req.max_clips, req.clip_seconds,
+                     mode=req.mode)
     background.add_task(pipeline_runner.run_pipeline, DB_PATH, JOB_ROOT, job_id)
     return {"job_id": job_id, "status": "queued"}
 

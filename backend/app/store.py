@@ -26,11 +26,16 @@ def init_db(db_path) -> Path:
                 message TEXT DEFAULT '',
                 max_clips INTEGER DEFAULT 5,
                 clip_seconds INTEGER DEFAULT 45,
+                mode TEXT DEFAULT 'auto',
                 clips_json TEXT DEFAULT '[]',
                 error TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Migrate DBs created before the mode column existed.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)")}
+        if "mode" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN mode TEXT DEFAULT 'auto'")
     return db_path
 
 
@@ -40,11 +45,12 @@ def _connect(db_path):
     return conn
 
 
-def create_job(db_path, job_id, url, max_clips, clip_seconds):
+def create_job(db_path, job_id, url, max_clips, clip_seconds, mode="auto"):
     with _lock, _connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO jobs (id, url, max_clips, clip_seconds) VALUES (?,?,?,?)",
-            (job_id, url, max_clips, clip_seconds))
+            "INSERT INTO jobs (id, url, max_clips, clip_seconds, mode) "
+            "VALUES (?,?,?,?,?)",
+            (job_id, url, max_clips, clip_seconds, mode))
 
 
 def update_job(db_path, job_id, **fields):
