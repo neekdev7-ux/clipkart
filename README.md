@@ -23,6 +23,15 @@ and each clip's SEO pack uses GTA 6 titles, hashtags (`#gta6`, `#gtavi`,
   hits; otherwise generic. An explicit `"gta6"` / `"generic"` always wins.
 - The resolved mode is stored on the job row (`mode` in `GET /api/jobs/{id}`).
 
+## Thumbnails & quality
+
+- Every clip gets a branded vertical thumbnail (`clip_{n}.jpg`, also at
+  `GET /api/jobs/{id}/clips/{n}/thumbnail`): frame grab + gold "GTA 6"
+  badge + the clip's first SEO title on a dark band.
+- Best-quality encodes: CRF 18, medium preset, 192k audio.
+- If the server restarts mid-job after the download finished, resume it
+  without re-downloading: `python recover_job.py <job_id>`.
+
 ## How it works
 
 1. **Download** — yt-dlp, best MP4 ≤1080p.

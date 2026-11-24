@@ -39,9 +39,10 @@ def _video_filter(mode: str, captions_ass=None) -> str:
 
 
 def cut_clip(input_path, start, end, output_path, mode="crop",
-             captions_ass=None, crf=23):
+             captions_ass=None, crf=18):
     """Cut [start, end) from input_path into a vertical 1080x1920 MP4.
 
+    Best-quality defaults: CRF 18 + medium preset + 192k audio.
     Returns the output path. Raises subprocess.CalledProcessError on failure.
     """
     duration = max(1.0, float(end) - float(start))
@@ -54,8 +55,8 @@ def cut_clip(input_path, start, end, output_path, mode="crop",
         "-filter_complex", filt,
         "-map", vlabel,
         "-map", "0:a?",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
-        "-c:a", "aac", "-b:a", "128k",
+        "-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
+        "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         str(output_path),
     ]

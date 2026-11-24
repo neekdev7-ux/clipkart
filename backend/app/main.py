@@ -105,6 +105,15 @@ def download_clip(job_id: str, n: int):
                         filename=f"clipnova-clip-{n}.mp4")
 
 
+@app.get("/api/jobs/{job_id}/clips/{n}/thumbnail")
+def download_thumbnail(job_id: str, n: int):
+    path = JOB_ROOT / job_id / "clips" / f"clip_{n}.jpg"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not found.")
+    return FileResponse(path, media_type="image/jpeg",
+                        filename=f"clipnova-clip-{n}-thumb.jpg")
+
+
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True),
               name="frontend")
